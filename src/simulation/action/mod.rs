@@ -1,6 +1,6 @@
 use hecs::Entity;
 
-use crate::simulation::Simulation;
+use crate::simulation::{Simulation, ecs::movement::MovementIntent};
 
 pub type ActionResult = Result<Option<Response>, ActionError>;
 
@@ -20,8 +20,7 @@ pub enum Action {
     Null, // null actions are ephemeral on the timeline and are intended only to force a state update for rendering
     // or similar
     Jump { entity: Entity },
-    StartMove { entity: Entity, dir: MoveDir },
-    StopMove { entity: Entity, dir: MoveDir },
+    SetMovementIntent { entity: Entity, dir: MovementIntent },
 }
 
 impl Action {
@@ -32,8 +31,7 @@ impl Action {
         match self {
             Self::Null => Ok(None),
             Self::Jump { entity } => Ok(None),
-            Self::StartMove { entity, dir } => Ok(None),
-            Self::StopMove { entity, dir } => Ok(None),
+            Self::SetMovementIntent { entity, dir } => Ok(None),
         }
     }
 

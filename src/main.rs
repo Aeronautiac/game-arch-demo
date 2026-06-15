@@ -42,17 +42,14 @@ mod simulation;
 // fills up by deleting staggered ticks. this should rarely ever happen.
 // certain ticks (if they include something like an ephemeral message that should really be seen) can be
 // marked as important and force a reallocation on overflow.
-
-fn simulation() {
-    let mut viewport_accumulator: Vec<World> = vec![];
-    let mut sim = Simulation::new();
-    dbg!("ran");
-}
+// basically quadruple buffering. three buffers for juggling with zero lock contention, and one
+// buffer to preserve data.
 
 #[macroquad::main("Cool game")]
 async fn main() {
     let (tx, rx) = mpsc::channel::<SimInteraction>();
 
+    // simulation
     thread::spawn(move || {
         let mut sim = Simulation::new();
 

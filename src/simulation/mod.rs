@@ -7,7 +7,7 @@ use crate::{
 
 pub mod action;
 
-mod systems;
+mod ecs;
 
 pub struct SimInteraction {
     pub action: Action,
@@ -31,7 +31,6 @@ impl Simulation {
 
     pub fn exec(&mut self, mut interaction: SimInteraction) -> ActionResult {
         // TODO:
-        // physics loop and shit.
         // the action execution is a simple conditional state mutation
         // the simulation is updated regardless of the outcome of that conditional mutation
 
