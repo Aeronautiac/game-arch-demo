@@ -1,7 +1,6 @@
-use std::{sync::mpsc, thread, time::Instant};
+use std::{collections::HashMap, sync::mpsc, thread, time::Instant};
 
-use crate::simulation::{SimInteraction, Simulation, action::Action};
-use hecs::World;
+use crate::simulation::{SimInteraction, SimOutput, SimViewport, Simulation, action::Action};
 use macroquad::prelude::*;
 
 mod common;
@@ -31,23 +30,18 @@ mod simulation;
 //
 // any decimal math in the simulation layer must use fixed point numbers.
 //
-// concurrency mechanism:
-// the renderer/input thread sends actions to a queue consumed by the simulation
-// the simulation processes these actions sequentually and accumulates an isolated viewport over time (a viewport includes filtered tick
-// snapshots up to some granularity)
-// it keeps writing that viewport to its current buffer and swaps whenever it does a write.
-// the updated entries keep growing and growing until the simulation receives an empty buffer (meaning the renderer has processed it).
-// the simulation then writes its current state to the new buffer, and clears its accumulator.
-// we can allocate only a fixed amount of memory and reduce the "granularity" of viewports if it
-// fills up by deleting staggered ticks. this should rarely ever happen.
-// certain ticks (if they include something like an ephemeral message that should really be seen) can be
-// marked as important and force a reallocation on overflow.
-// basically quadruple buffering. three buffers for juggling with zero lock contention, and one
-// buffer to preserve data.
+// the simulation pushes outputs to a lock free ring buffer. the main thread reads from that buffer
+// and pops from it. it associates responses to inputs using a local stack. it may choose to discard
+// visual outputs.
+//
+// there needs to be a separate input thread, a networking thread, etc...
 
 #[macroquad::main("Cool game")]
 async fn main() {
+    // sim input
     let (tx, rx) = mpsc::channel::<SimInteraction>();
+
+    // sim output
 
     // simulation
     thread::spawn(move || {

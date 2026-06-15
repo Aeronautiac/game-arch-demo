@@ -1,16 +1,20 @@
-use hecs::World;
-use macroquad::miniquad::native::linux_x11::libx11::Time;
+use bevy_ecs::{component::Component, world::World};
+use fixed::types::I32F32;
 
+use crate::common::Time;
 use crate::simulation::ecs::transform::Transform;
 
+#[derive(Component)]
 pub struct Velocity {
-    pub x: f32,
-    pub y: f32,
+    pub x: I32F32,
+    pub y: I32F32,
 }
 
 pub fn apply_velocity(world: &mut World, dt: Time) {
-    for (vel, pos) in world.query_mut::<(&Velocity, &mut Transform)>() {
-        pos.x += vel.x * dt as f32;
-        pos.y += vel.y * dt as f32;
+    let dt_fixed = I32F32::from_num(dt);
+    let mut query = world.query::<(&Velocity, &mut Transform)>();
+    for (vel, mut pos) in query.iter_mut(world) {
+        pos.x += vel.x * dt_fixed;
+        pos.y += vel.y * dt_fixed;
     }
 }
