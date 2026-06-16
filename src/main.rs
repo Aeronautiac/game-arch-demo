@@ -1,4 +1,10 @@
-use std::{process::exit, sync::atomic::AtomicU64, thread, time::Instant};
+use std::{
+    collections::VecDeque,
+    process::exit,
+    sync::{Arc, atomic::AtomicU64},
+    thread,
+    time::Instant,
+};
 
 use crate::simulation::{
     SimInteraction, SimView, Simulation,
@@ -37,10 +43,21 @@ mod simulation;
 // any decimal math in the simulation layer must use fixed point numbers.
 //
 // the simulation pushes outputs to a lock free ring buffer. the main thread reads from that buffer
-// and pops from it. it associates responses to inputs using a local stack. it may choose to discard
-// visual outputs.
+// and pops from it. it associates responses to inputs using a local stack.
+//
+// visual updates are pushed to a triple buffer. the simulation loop builds up an accumulated visual
+// update buffer and discards everything up to the last viewed tick by the renderer.
 //
 // there needs to be a separate input thread, a networking thread, etc...
+//
+// this is not traditional rollback nor is it traditional lockstep. everyone - the clients, the
+// server hold their own version of the game state (the simulation) which they can freely
+// manipulate. the server just corrects things that should not have happened by deriving the correct
+// timeline after receiving an event and checking if a previously approved client input suddenly
+// gets rejected. it also sends events initiated by the other player(s) to everyone else, and
+// everyone else then reconstructs the proper game state.
+//
+// the simulation is constantly running on an isolated thread.
 
 // quick prototype
 #[macroquad::main("Cool game")]
@@ -49,28 +66,31 @@ async fn main() {
     let (actions_in, actions_out) = unbounded::<SimInteraction>();
 
     // sim output
+    let last_viewed_tick: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
     let (mut views_in, mut views_out) = triple_buffer(&SimView {
-        x: 0.into(),
-        y: 0.into(),
-        tick: 0,
+        tick_views: VecDeque::new(),
     });
-    let mut last_viewed_tick: AtomicU64 = AtomicU64::new(0);
     let (results_in, results_out) = unbounded::<ActionResult>();
 
     // simulation
+    let last_viewed_sim = last_viewed_tick.clone();
     thread::spawn(move || {
         let mut sim = Simulation::new();
 
         // track sim time for Null action dt, but use external dt when supplied
+        let mut accumulated_view = SimView {
+            tick_views: VecDeque::new(),
+        };
         let mut last = Instant::now();
         loop {
             let dt = last.elapsed().as_nanos();
             last = Instant::now();
-            if let Ok(interaction) = actions_out.try_recv() {
+
+            let view = if let Ok(interaction) = actions_out.try_recv() {
                 // for now, just send it into the simulation and discard the response
                 let out = sim.exec(interaction);
                 results_in.send(out.action_result).unwrap();
-                views_in.write(out.view);
+                out.view
             } else {
                 std::hint::spin_loop();
                 if dt == 0 {
@@ -83,8 +103,13 @@ async fn main() {
                     action: Action::Null,
                     dt,
                 });
-                views_in.write(out.view);
-            }
+                out.view
+            };
+
+            accumulated_view.merge_with(view);
+            accumulated_view.prune_to(last_viewed_sim.load(std::sync::atomic::Ordering::SeqCst));
+
+            views_in.write(accumulated_view.clone());
         }
     });
 
@@ -104,11 +129,11 @@ async fn main() {
     // begin rendering and input loop
     // later separate them
     let mut last = Instant::now();
-    let mut px: f64;
-    let mut py: f64;
     let mut last_intent = MovementIntent::EMPTY;
     loop {
         let dt = last.elapsed().as_nanos();
+        last = Instant::now();
+
         if is_key_down(KeyCode::Q) {
             exit(0);
         }
@@ -141,14 +166,20 @@ async fn main() {
         last_intent = move_intent;
 
         let view = views_out.read();
-        px = view.x.to_num::<f64>();
-        py = view.y.to_num::<f64>();
 
         clear_background(BLACK);
+        for tick_view in &view.tick_views {
+            for vp in &tick_view.viewports {
+                for entity in &vp.entities {
+                    let px = entity.pos.x.to_num::<f32>();
+                    let py = entity.pos.y.to_num::<f32>();
 
-        draw_circle(px as f32, py as f32, 10.0, BLUE);
+                    draw_circle(px, py, 10.0, BLUE);
+                }
+            }
+            last_viewed_tick.store(tick_view.tick, std::sync::atomic::Ordering::SeqCst);
+        }
 
-        last = Instant::now();
         next_frame().await;
     }
 }

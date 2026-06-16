@@ -1,8 +1,9 @@
 use bevy_ecs::component::Component;
-use fixed::types::I32F32;
 
-#[derive(Component)]
+use crate::common::Fixed;
+
+#[derive(Component, Clone)]
 pub struct Transform {
-    pub x: I32F32,
-    pub y: I32F32,
+    pub x: Fixed,
+    pub y: Fixed,
 }

@@ -1,8 +1,7 @@
 use bevy_ecs::{component::Component, world::World};
 use enumflags2::{BitFlags, bitflags};
-use fixed::types::I32F32;
 
-use crate::simulation::ecs::velocity::Velocity;
+use crate::{common::Fixed, simulation::ecs::velocity::Velocity};
 
 #[bitflags]
 #[repr(u8)]
@@ -19,10 +18,10 @@ pub type MovementIntent = BitFlags<MovementDir>;
 #[derive(Component)]
 pub struct Movement {
     pub intent: MovementIntent,
-    pub boost: I32F32,
+    pub boost: Fixed,
 }
 
-const BOOST_MULT: I32F32 = I32F32::lit("1.5");
+const BOOST_MULT: Fixed = Fixed::lit("1.5");
 
 pub fn movement_system(world: &mut World) {
     let mut query = world.query::<(&Movement, &mut Velocity)>();
@@ -43,7 +42,7 @@ pub fn movement_system(world: &mut World) {
             y += 1;
         }
 
-        vel.x = I32F32::from_num(x) / 1_000_000_000 * BOOST_MULT * 100;
-        vel.y = I32F32::from_num(y) / 1_000_000_000 * BOOST_MULT * 100;
+        vel.x = Fixed::from_num(x) * BOOST_MULT * 5000;
+        vel.y = Fixed::from_num(y) * BOOST_MULT * 5000;
     }
 }
