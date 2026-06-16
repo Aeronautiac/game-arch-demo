@@ -1,18 +1,17 @@
-use std::collections::HashMap;
-
 use bevy_ecs::world::World;
+use fixed::types::I32F32;
 
 use crate::{
-    common::Time,
+    common::{Tick, Time},
     simulation::{
         action::{Action, ActionResult},
-        ecs::{movement::movement_system, velocity::apply_velocity},
+        ecs::{movement::movement_system, transform::Transform, velocity::apply_velocity},
     },
 };
 
 pub mod action;
 
-mod ecs;
+pub mod ecs;
 
 #[derive(Clone)]
 pub struct SimInteraction {
@@ -22,23 +21,21 @@ pub struct SimInteraction {
                   // structural level.
 }
 
-// TODO: world serialization/snapshot for the transport layer
-#[derive(Clone, Default)]
-pub struct SimViewport;
-
-// this will include viewports, responses, and a "consumed" flag
-// for now viewports will just be world snapshots after the entire ticking loop
-// responses will also just use a map right now to make things simple,
-// but this will hurt performance in serious games
 #[derive(Clone)]
+pub struct SimView {
+    pub x: I32F32,
+    pub y: I32F32,
+    pub tick: Tick,
+}
+
 pub struct SimOutput {
-    pub viewport: SimViewport,
-    pub results: HashMap<u64, ActionResult>,
-    pub consumed: bool,
+    pub view: SimView,
+    pub action_result: ActionResult,
 }
 
 pub struct Simulation {
     pub excess: Time,
+    pub tick: Tick,
     pub world: World,
 }
 
@@ -46,41 +43,67 @@ impl Simulation {
     pub fn new() -> Self {
         Simulation {
             excess: 0,
+            tick: 0,
             world: World::new(),
         }
     }
 
     // the identifier is a u64
-    pub fn exec(&mut self, mut interaction: SimInteraction) -> ActionResult {
+    pub fn exec(&mut self, mut interaction: SimInteraction) -> SimOutput {
         // TODO:
         // the action execution is a simple conditional state mutation
         // the simulation is updated regardless of the outcome of that conditional mutation
 
-        self.tick_loop(interaction.dt);
+        let tick_out = self.tick_loop(interaction.dt);
 
         // TODO:
         // handle rejections later
-        let _ = interaction.action.exec(self);
+        let action_result = interaction.action.exec(self);
 
-        Ok(None)
+        SimOutput {
+            view: tick_out,
+            action_result,
+        }
     }
 
-    fn tick_loop(&mut self, total_dt: Time) {
+    fn tick_loop(&mut self, total_dt: Time) -> SimView {
+        let mut remaining_time = total_dt + self.excess;
+        // dbg!(remaining_time);
+        // dbg!(self.excess);
         loop {
-            let remaining_time = total_dt + self.excess;
-            let dt = self.get_tick_duration();
-            if remaining_time < dt {
+            let tick_duration = self.get_tick_duration();
+            if remaining_time < tick_duration {
                 self.excess = remaining_time;
                 break;
             }
 
             movement_system(&mut self.world);
-            apply_velocity(&mut self.world, dt);
+            apply_velocity(&mut self.world, tick_duration);
+
+            remaining_time -= tick_duration;
+            self.tick += 1;
+        }
+        // dbg!(self.tick);
+
+        let mut query = self.world.query::<&Transform>();
+        let position = query.iter(&self.world).next();
+        if let Some(pos) = position {
+            // dbg!(pos.x, pos.y);
+            SimView {
+                x: pos.x,
+                y: pos.y,
+                tick: self.tick,
+            }
+        } else {
+            SimView {
+                x: 0.into(),
+                y: 0.into(),
+                tick: self.tick,
+            }
         }
     }
 
-    // for now fix at 60hz, later this is chosen based on current state
     fn get_tick_duration(&self) -> Time {
-        1_000_000 / 60
+        1_000_000_000 / 240
     }
 }
