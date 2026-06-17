@@ -1,11 +1,14 @@
 use bevy_ecs::entity::Entity;
 
-use crate::simulation::{
-    Simulation,
-    ecs::{
-        movement::{Movement, MovementIntent},
-        transform::Transform,
-        velocity::Velocity,
+use crate::{
+    common::{Fixed, Vec2F},
+    simulation::{
+        Simulation,
+        ecs::{
+            movement::{Movement, MovementIntent},
+            transform::Transform,
+            velocity::Velocity,
+        },
     },
 };
 
@@ -56,14 +59,11 @@ impl Action {
                             Movement {
                                 intent: MovementIntent::EMPTY,
                                 boost: 0.into(),
+                                vel_src: None,
                             },
-                            Velocity {
-                                x: 0.into(),
-                                y: 0.into(),
-                            },
+                            Velocity::new(),
                             Transform {
-                                x: 0.into(),
-                                y: 0.into(),
+                                position: Vec2F::new(Fixed::from_num(0), Fixed::from_num(0)),
                             },
                         ))
                         .id();

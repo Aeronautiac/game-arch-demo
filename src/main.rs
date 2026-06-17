@@ -171,8 +171,8 @@ async fn main() {
         for tick_view in &view.tick_views {
             for vp in &tick_view.viewports {
                 for entity in &vp.entities {
-                    let px = entity.pos.x.to_num::<f32>();
-                    let py = entity.pos.y.to_num::<f32>();
+                    let px = entity.pos.position[0].to_num::<f32>();
+                    let py = entity.pos.position[1].to_num::<f32>();
 
                     draw_circle(px, py, 10.0, BLUE);
                 }

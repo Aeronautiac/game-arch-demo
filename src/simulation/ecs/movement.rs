@@ -1,7 +1,10 @@
 use bevy_ecs::{component::Component, world::World};
 use enumflags2::{BitFlags, bitflags};
 
-use crate::{common::Fixed, simulation::ecs::velocity::Velocity};
+use crate::{
+    common::{Fixed, Vec2F},
+    simulation::ecs::velocity::{SourceID, Velocity},
+};
 
 #[bitflags]
 #[repr(u8)]
@@ -19,30 +22,40 @@ pub type MovementIntent = BitFlags<MovementDir>;
 pub struct Movement {
     pub intent: MovementIntent,
     pub boost: Fixed,
+    pub vel_src: Option<SourceID>,
 }
 
 const BOOST_MULT: Fixed = Fixed::lit("1.5");
+const MOVE_SPEED: Fixed = Fixed::lit("1500");
 
 pub fn movement_system(world: &mut World) {
-    let mut query = world.query::<(&Movement, &mut Velocity)>();
-    for (mvmt, mut vel) in query.iter_mut(world) {
-        let mut x: i32 = 0;
-        let mut y: i32 = 0;
+    let mut query = world.query::<(&mut Movement, &mut Velocity)>();
+    for (mut mvmt, mut vel) in query.iter_mut(world) {
+        if mvmt.vel_src.is_none() {
+            mvmt.vel_src = Some(vel.new_source());
+        }
 
+        const ONE: Fixed = Fixed::lit("1");
+        let mut vec = Vec2F::default();
         if mvmt.intent.contains(MovementDir::Left) {
-            x -= 1;
+            vec[0] -= ONE;
         }
         if mvmt.intent.contains(MovementDir::Right) {
-            x += 1;
+            vec[0] += ONE;
         }
         if mvmt.intent.contains(MovementDir::Up) {
-            y -= 1;
+            vec[1] -= ONE;
         }
         if mvmt.intent.contains(MovementDir::Down) {
-            y += 1;
+            vec[1] += ONE;
         }
 
-        vel.x = Fixed::from_num(x) * BOOST_MULT * 5000;
-        vel.y = Fixed::from_num(y) * BOOST_MULT * 5000;
+        let magnitude = (vec[0] * vec[0] + vec[1] * vec[1]).sqrt();
+        if magnitude != Fixed::lit("0") {
+            vec /= magnitude;
+        }
+        vec *= MOVE_SPEED;
+
+        vel.set_source(mvmt.vel_src.unwrap(), vec, Fixed::lit("0"));
     }
 }

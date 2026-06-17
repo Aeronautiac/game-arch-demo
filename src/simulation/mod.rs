@@ -101,22 +101,16 @@ impl Simulation {
             excess: 0,
             tick: 0,
             world: World::new(),
-            view_stagger: 6,
+            view_stagger: 10,
         }
     }
 
     // the identifier is a u64
+    // the action execution is a simple conditional state mutation
+    // the simulation is updated regardless of the outcome of that conditional mutation
     pub fn exec(&mut self, mut interaction: SimInteraction) -> SimOutput {
-        // TODO:
-        // the action execution is a simple conditional state mutation
-        // the simulation is updated regardless of the outcome of that conditional mutation
-
         let tick_out = self.tick_loop(interaction.dt);
-
-        // TODO:
-        // handle rejections later
         let action_result = interaction.action.exec(self);
-
         SimOutput {
             view: tick_out,
             action_result,
@@ -182,6 +176,7 @@ impl Simulation {
     // TODO:
     // determine precision requirements based on cached max speeds and smallest distances
     fn get_tick_duration(&self) -> Time {
-        Time::from_sec(Fixed::from_num(1) / Fixed::from_num(240))
+        // placeholder. this isnt intended to be fixed timestep.
+        Time::from_sec(Fixed::from_num(1) / Fixed::from_num(580))
     }
 }

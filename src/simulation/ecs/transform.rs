@@ -1,9 +1,8 @@
 use bevy_ecs::component::Component;
 
-use crate::common::Fixed;
+use crate::common::Vec2F;
 
 #[derive(Component, Clone)]
 pub struct Transform {
-    pub x: Fixed,
-    pub y: Fixed,
+    pub position: Vec2F,
 }
