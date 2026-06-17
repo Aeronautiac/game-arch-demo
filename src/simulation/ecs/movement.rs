@@ -3,7 +3,7 @@ use enumflags2::{BitFlags, bitflags};
 
 use crate::{
     common::{Fixed, Vec2F},
-    simulation::ecs::velocity::{SourceID, Velocity},
+    simulation::ecs::physics::{SourceID, forces::Forces, from_linear},
 };
 
 #[bitflags]
@@ -21,18 +21,16 @@ pub type MovementIntent = BitFlags<MovementDir>;
 #[derive(Component)]
 pub struct Movement {
     pub intent: MovementIntent,
-    pub boost: Fixed,
-    pub vel_src: Option<SourceID>,
+    pub phys_src: Option<SourceID>,
 }
 
-const BOOST_MULT: Fixed = Fixed::lit("1.5");
-const MOVE_SPEED: Fixed = Fixed::lit("1500");
+const MOVE_ACCEL: Fixed = Fixed::lit("100");
 
 pub fn movement_system(world: &mut World) {
-    let mut query = world.query::<(&mut Movement, &mut Velocity)>();
-    for (mut mvmt, mut vel) in query.iter_mut(world) {
-        if mvmt.vel_src.is_none() {
-            mvmt.vel_src = Some(vel.new_source());
+    let mut query = world.query::<(&mut Movement, &mut Forces)>();
+    for (mut mvmt, mut forces) in query.iter_mut(world) {
+        if mvmt.phys_src.is_none() {
+            mvmt.phys_src = Some(forces.sources.new_source());
         }
 
         const ONE: Fixed = Fixed::lit("1");
@@ -54,8 +52,10 @@ pub fn movement_system(world: &mut World) {
         if magnitude != Fixed::lit("0") {
             vec /= magnitude;
         }
-        vec *= MOVE_SPEED;
+        vec *= MOVE_ACCEL;
 
-        vel.set_source(mvmt.vel_src.unwrap(), vec, Fixed::lit("0"));
+        forces
+            .sources
+            .set_source(mvmt.phys_src.unwrap(), from_linear(vec));
     }
 }

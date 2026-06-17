@@ -6,8 +6,8 @@ use crate::{
         Simulation,
         ecs::{
             movement::{Movement, MovementIntent},
+            physics::{forces::Forces, velocity::Velocity},
             transform::Transform,
-            velocity::Velocity,
         },
     },
 };
@@ -58,9 +58,9 @@ impl Action {
                         .spawn((
                             Movement {
                                 intent: MovementIntent::EMPTY,
-                                boost: 0.into(),
-                                vel_src: None,
+                                phys_src: None,
                             },
+                            Forces::new(),
                             Velocity::new(),
                             Transform {
                                 position: Vec2F::new(Fixed::from_num(0), Fixed::from_num(0)),

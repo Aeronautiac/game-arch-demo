@@ -1,4 +1,3 @@
-pub mod forces;
 pub mod movement;
+pub mod physics;
 pub mod transform;
-pub mod velocity;

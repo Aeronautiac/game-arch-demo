@@ -11,8 +11,11 @@ use crate::{
         action::{Action, ActionResult},
         ecs::{
             movement::movement_system,
+            physics::{
+                forces::apply_forces,
+                velocity::{Velocity, apply_velocity},
+            },
             transform::Transform,
-            velocity::{Velocity, apply_velocity},
         },
     },
 };
@@ -149,6 +152,7 @@ impl Simulation {
             }
 
             movement_system(&mut self.world);
+            apply_forces(&mut self.world, tick_duration);
             apply_velocity(&mut self.world, tick_duration);
 
             if first_tick || stagger == 0 {
@@ -177,6 +181,6 @@ impl Simulation {
     // determine precision requirements based on cached max speeds and smallest distances
     fn get_tick_duration(&self) -> Time {
         // placeholder. this isnt intended to be fixed timestep.
-        Time::from_sec(Fixed::from_num(1) / Fixed::from_num(580))
+        Time::from_sec(Fixed::from_num(1) / Fixed::from_num(240))
     }
 }
