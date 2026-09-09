@@ -1,8 +1,8 @@
 use bevy_ecs::component::Component;
+use glam::Vec2;
 
-use crate::common::Vec2F;
-
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Default)]
 pub struct Transform {
-    pub position: Vec2F,
+    pub position: Vec2,
+    pub rotation: f32, // wrap around at >= 360
 }

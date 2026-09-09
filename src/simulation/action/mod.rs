@@ -1,16 +1,6 @@
 use bevy_ecs::entity::Entity;
 
-use crate::{
-    common::{Fixed, Vec2F},
-    simulation::{
-        Simulation,
-        ecs::{
-            movement::{Movement, MovementIntent},
-            physics::{forces::Forces, velocity::Velocity},
-            transform::Transform,
-        },
-    },
-};
+use crate::simulation::Simulation;
 
 pub type ActionResult = Result<ActionResponse, ActionError>;
 
@@ -31,47 +21,14 @@ pub enum ActionResponse {
 #[derive(Clone)]
 pub enum Action {
     Null, // null actions are ephemeral on the timeline and are intended only to force a state update for rendering
-    SetMovementIntent {
-        target: Entity,
-        intent: MovementIntent,
-    },
-    CreateShip,
+    CreatePlayer,
 }
 
 impl Action {
     fn handle(&mut self, sim: &mut Simulation, mutate: bool) -> ActionResult {
         match self {
             Self::Null => Ok(ActionResponse::Null),
-            Self::SetMovementIntent { target, intent } => {
-                let mut entity = sim.world.entity_mut(*target);
-                let mut mvmt = entity.get_mut::<Movement>().unwrap();
-                if mutate {
-                    mvmt.intent = *intent;
-                    // dbg!(mvmt.intent);
-                }
-                Ok(ActionResponse::Null)
-            }
-            Self::CreateShip => {
-                if mutate {
-                    let ship = sim
-                        .world
-                        .spawn((
-                            Movement {
-                                intent: MovementIntent::EMPTY,
-                                phys_src: None,
-                            },
-                            Forces::new(),
-                            Velocity::new(),
-                            Transform {
-                                position: Vec2F::new(Fixed::from_num(0), Fixed::from_num(0)),
-                            },
-                        ))
-                        .id();
-                    Ok(ActionResponse::Entity(ship))
-                } else {
-                    Ok(ActionResponse::Null)
-                }
-            }
+            Self::CreatePlayer => Ok(ActionResponse::Null),
         }
     }
 
