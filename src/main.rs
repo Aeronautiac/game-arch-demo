@@ -6,10 +6,7 @@ use std::{
     time::Instant,
 };
 
-use crate::simulation::{
-    SimInteraction, SimView, Simulation,
-    action::{Action, ActionResult},
-};
+use crate::simulation::{SimInput, Simulation};
 use crossbeam::channel::unbounded;
 use macroquad::prelude::*;
 use triple_buffer::triple_buffer;
@@ -21,14 +18,14 @@ mod simulation;
 #[macroquad::main("combat-demo-rs")]
 async fn main() {
     // sim input
-    let (actions_in, actions_out) = unbounded::<SimInteraction>();
+    let (actions_in, actions_out) = unbounded::<SimInput>();
 
     // sim output
     let last_viewed_tick: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-    let (mut views_in, mut views_out) = triple_buffer(&SimView {
-        tick_views: VecDeque::new(),
-    });
-    let (results_in, results_out) = unbounded::<ActionResult>();
+    // let (mut views_in, mut views_out) = triple_buffer(&SimView {
+    //     tick_views: VecDeque::new(),
+    // });
+    let (results_in, results_out) = unbounded();
 
     // simulation
     let last_viewed_sim = last_viewed_tick.clone();

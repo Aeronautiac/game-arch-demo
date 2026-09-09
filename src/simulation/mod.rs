@@ -1,173 +1,160 @@
 use std::collections::VecDeque;
 
-use bevy_ecs::world::World;
+use bevy_ecs::{entity::Entity, schedule::Schedule, world::World};
+use glam::Vec2;
 
-use crate::simulation::{
-    action::{Action, ActionResult},
-    ecs::transform::Transform,
-};
+use crate::simulation::ecs::transform::Transform;
 
-pub mod action;
 pub mod ecs;
 
-#[derive(Clone)]
-pub struct SimInteraction {
-    pub action: Action,
-    pub dt: TimeBase, // a simple time increment. using this rather than timestamps prevents
-                      // events that go back in time from even being a possibility enforcing the invariant on a
-                      // structural level.
+pub type TickInt = u64;
+pub type TimeInt = u64;
+pub type TimeFloat = f32;
+
+#[derive(Debug)]
+pub enum SimErr {
+    EntityNotFound,
 }
 
-#[derive(Clone)]
-pub struct VpEntity {
-    pub pos: Transform,
-    pub vel: Velocity,
+// responses will use generalized structures
+// you must extract the correct response based on context
+pub enum SimResponse {
+    Null,
+    Entity(Entity),
 }
 
+pub type SimResult = Result<SimResponse, SimErr>;
+
+// before any action is executed, all the ticks within dt will be simulated.
+// to implement time dilation, simply multiply the dt passed into the sim interaction by some factor.
 #[derive(Clone)]
-pub struct Viewport {
-    pub entities: Vec<VpEntity>, // find a way to make this more performant later
+pub enum InputPayload {
+    Null, // null actions are ephemeral on the timeline and are intended only to force a state update for rendering
+    CreatePlayer,
 }
 
-#[derive(Clone)]
-pub struct TickView {
-    pub viewports: Vec<Viewport>,
-    pub tick: Tick,
-}
-
-#[derive(Clone)]
-pub struct SimView {
-    pub tick_views: VecDeque<TickView>,
-}
-
-// to merge sim views, just append the one with the latest first tick time to the other
-// simviews will not have overlapping ticks
-impl SimView {
-    // for now just loop through to find the tick, but we can use a binary search later to find the
-    // cut point
-    pub fn prune_to(&mut self, tick: Tick) {
-        while !self.tick_views.is_empty() {
-            if self.tick_views[0].tick < tick {
-                self.tick_views.pop_front();
-            } else {
-                break;
-            }
-        }
-    }
-
-    pub fn merge_with(&mut self, mut other: Self) {
-        if other.tick_views.is_empty() {
-            return;
-        }
-        if self.tick_views.is_empty() {
-            self.tick_views = other.tick_views;
-            return;
-        }
-        if other.tick_views[0].tick > self.tick_views[0].tick {
-            self.tick_views.append(&mut other.tick_views);
-        } else {
-            other.tick_views.append(&mut self.tick_views);
-            self.tick_views = other.tick_views;
+impl InputPayload {
+    pub fn exec(&mut self, sim: &mut Simulation) -> SimResult {
+        match self {
+            Self::Null => Ok(SimResponse::Null),
+            Self::CreatePlayer => Ok(SimResponse::Null),
         }
     }
 }
 
-pub struct SimOutput {
-    pub view: SimView,
-    pub action_result: ActionResult,
+#[derive(Clone)]
+pub struct SimInput {
+    pub payload: InputPayload,
+    pub dt: TimeInt,
+}
+
+pub enum ViewDataPayload {
+    Physical {
+        entity_id: Entity,
+        transform: Transform,
+        velocity: Vec2,
+        angular_velocity: f32,
+    },
+}
+
+pub struct ViewData {
+    pub payload: ViewDataPayload,
+    pub tick: TickInt,
+}
+
+pub struct LossyViewBuffer {
+    pub data: VecDeque<ViewData>,
+}
+
+impl LossyViewBuffer {
+    pub fn new(initial_capacity: usize) -> Self {
+        let mut v = VecDeque::new();
+        v.reserve(initial_capacity);
+        LossyViewBuffer { data: v }
+    }
+
+    // if there are too many entries in the batch, we reserve more room so nothing is immediately lost.
+    //
+    // degradation only occurs across multiple ticks, i.e., when when we overflow on current storage,
+    // but not capacity. we then drop half precision.
+    pub fn append(&mut self, batch: &mut Vec<ViewDataPayload>) {
+        let batch_len = batch.len();
+        let capacity = self.data.capacity();
+        if batch_len > capacity {
+            let diff = batch_len - capacity;
+            self.data.reserve(diff);
+        }
+
+        // if the new data would overflow, half
+    }
+
+    // discard odd indices
+    pub fn drop_precision(&mut self) {}
+
+    // binary search to find the cut point (where tick > cut_tick), then cut off the prefix.
+    pub fn discard_to(&mut self, cut_tick: TickInt) {
+        let cut_idx = self.data.partition_point(|data| data.tick <= cut_tick);
+        self.data.drain(0..cut_idx);
+    }
 }
 
 pub struct Simulation {
-    pub excess: TimeBase,
-    pub tick: Tick,
-    pub world: World,
-    pub view_stagger: u64, // views are sampled at the start and end of the tick loop, and
-                           // within the loop, views are pulled every x ticks
+    excess: u64,
+    tick: u64,
+    world: World,
+    schedule: Schedule,
+
+    // output buffers
+    lossy_view_stage: Vec<ViewDataPayload>,
+    pub lossy_view_buf: LossyViewBuffer,
 }
 
 impl Simulation {
     pub fn new() -> Self {
+        let schedule = Schedule::default();
+
         Simulation {
             excess: 0,
             tick: 0,
             world: World::new(),
-            view_stagger: 10,
+            lossy_view_stage: Vec::default(),
+            lossy_view_buf: LossyViewBuffer::new(4096),
+            schedule,
         }
     }
 
     // the identifier is a u64
     // the action execution is a simple conditional state mutation
     // the simulation is updated regardless of the outcome of that conditional mutation
-    pub fn exec(&mut self, mut interaction: SimInteraction) -> SimOutput {
-        let tick_out = self.tick_loop(interaction.dt);
-        let action_result = interaction.action.exec(self);
-        SimOutput {
-            view: tick_out,
-            action_result,
-        }
+    pub fn exec(&mut self, mut interaction: SimInput) -> SimResult {
+        let res = interaction.payload.exec(self);
+        self.tick_loop(interaction.dt);
+        res
     }
 
-    fn get_viewport(&mut self) -> Viewport {
-        let mut vp = Viewport { entities: vec![] };
-        let mut query = self.world.query::<(&Velocity, &Transform)>();
-        for (vel, transform) in query.iter(&self.world) {
-            vp.entities.push(VpEntity {
-                vel: vel.clone(),
-                pos: transform.clone(),
-            });
-        }
-        vp
-    }
-
-    fn tick_loop(&mut self, total_dt: TimeBase) -> SimView {
-        let mut view = SimView {
-            tick_views: VecDeque::new(),
-        };
-
+    fn tick_loop(&mut self, total_dt: u64) {
         let mut remaining_time = total_dt + self.excess;
-        let mut first_tick = true;
-        let mut stagger: u64 = self.view_stagger;
         loop {
             let tick_duration = self.get_tick_duration();
-            if remaining_time < tick_duration.pure() {
-                view.tick_views.push_back(TickView {
-                    viewports: vec![self.get_viewport()],
-                    tick: self.tick,
-                });
+            if remaining_time < tick_duration {
                 self.excess = remaining_time;
                 break;
             }
 
-            movement_system(&mut self.world);
-            apply_forces(&mut self.world, tick_duration);
-            apply_velocity(&mut self.world, tick_duration);
+            // movement_system(&mut self.world);
+            // apply_forces(&mut self.world, tick_duration);
+            // apply_velocity(&mut self.world, tick_duration);
+            self.schedule.run(&mut self.world);
 
-            if first_tick || stagger == 0 {
-                view.tick_views.push_back(TickView {
-                    viewports: vec![self.get_viewport()],
-                    tick: self.tick,
-                });
-            }
-
-            remaining_time -= tick_duration.pure();
+            remaining_time -= tick_duration;
             self.tick += 1;
-
-            if stagger == 0 {
-                stagger = self.view_stagger;
-            } else {
-                stagger -= 1;
-            }
-
-            first_tick = false;
         }
-
-        view
     }
 
     // TODO:
     // determine precision requirements based on cached max speeds and smallest distances
-    fn get_tick_duration(&self) -> Time {
+    fn get_tick_duration(&self) -> u64 {
         // placeholder. this isnt intended to be fixed timestep.
-        Time::from_sec(Fixed::from_num(1) / Fixed::from_num(240))
+        1_000_000_000 / 120
     }
 }
