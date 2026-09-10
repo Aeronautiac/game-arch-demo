@@ -64,6 +64,7 @@ pub struct ViewData {
     pub tick: TickInt,
 }
 
+#[derive(Clone)]
 pub struct LossyViewBuffer {
     pub data: VecDeque<ViewData>,
 }

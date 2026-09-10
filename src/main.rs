@@ -1,12 +1,11 @@
 use std::{
-    collections::VecDeque,
     process::exit,
     sync::{Arc, atomic::AtomicU64},
     thread,
     time::Instant,
 };
 
-use crate::simulation::{SimInput, Simulation};
+use crate::simulation::{InputPayload, SimInput, Simulation};
 use crossbeam::channel::unbounded;
 use macroquad::prelude::*;
 use triple_buffer::triple_buffer;
@@ -22,9 +21,7 @@ async fn main() {
 
     // sim output
     let last_viewed_tick: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
-    // let (mut views_in, mut views_out) = triple_buffer(&SimView {
-    //     tick_views: VecDeque::new(),
-    // });
+    let (mut views_in, mut views_out) = triple_buffer(&Vec::new());
     let (results_in, results_out) = unbounded();
 
     // simulation
@@ -32,39 +29,34 @@ async fn main() {
     thread::spawn(move || {
         let mut sim = Simulation::new();
 
-        // track sim time for Null action dt, but use external dt when supplied
-        let mut accumulated_view = SimView {
-            tick_views: VecDeque::new(),
-        };
         let mut last = Instant::now();
         loop {
-            let dt = last.elapsed().as_nanos();
+            let dt = last.elapsed().as_nanos() as u64;
             last = Instant::now();
 
-            let view = if let Ok(interaction) = actions_out.try_recv() {
-                // for now, just send it into the simulation and discard the response
+            if let Ok(mut interaction) = actions_out.try_recv() {
+                interaction.dt = dt;
                 let out = sim.exec(interaction);
-                results_in.send(out.action_result).unwrap();
-                out.view
+                results_in.send(out).unwrap();
             } else {
-                std::hint::spin_loop();
                 if dt == 0 {
                     continue;
                 }
                 // if there are no actions to execute, inject a null action
                 // a null action still triggers the simulation's adaptive tick loop (deterministic
                 // regardless of dt and number of inputs)
-                let out = sim.exec(SimInteraction {
-                    action: Action::Null,
+                let out = sim.exec(SimInput {
+                    payload: InputPayload::Null,
                     dt,
                 });
-                out.view
             };
 
-            accumulated_view.merge_with(view);
-            accumulated_view.prune_to(last_viewed_sim.load(std::sync::atomic::Ordering::SeqCst));
-
-            views_in.write(accumulated_view.clone());
+            sim.lossy_view_buf
+                .discard_to(last_viewed_sim.load(std::sync::atomic::Ordering::Relaxed));
+            let input_buf = views_in.input_buffer_mut();
+            input_buf.clear();
+            input_buf.extend(sim.lossy_view_buf.data.iter().cloned());
+            views_in.publish();
         }
     });
 
@@ -91,26 +83,8 @@ async fn main() {
 
         let view = views_out.read();
 
-        let mut x = 0.0;
-        let mut y = 0.0;
-        let mut rot = 0.0;
-        for tick_view in &view.tick_views {
-            for vp in &tick_view.viewports {
-                for entity in &vp.entities {
-                    let prot = entity.pos.rotation;
-                    let px = entity.pos.position.x;
-                    let py = entity.pos.position.y;
-
-                    x = px;
-                    y = py;
-                    rot = prot;
-                }
-            }
-            last_viewed_tick.store(tick_view.tick, std::sync::atomic::Ordering::SeqCst);
-        }
-
         clear_background(BLACK);
-        draw_poly(x, y, 3, 35.0, rot, WHITE);
+        // draw_poly(x, y, 3, 35.0, rot, WHITE);
 
         next_frame().await;
     }

@@ -33,16 +33,11 @@ new_key_type! {
     struct ModifierID;
 }
 
-pub enum ModifierKind {
-    Velocity,
-    AngularVelocity,
-    Force,
-    AngularForce,
-}
-
-pub struct Modifier {
-    pub kind: ModifierKind,
-    pub value: f32,
+pub enum Modifier {
+    Velocity(Vec2),
+    AngularVelocity(f32),
+    Force(Vec2),
+    AngularForce(f32),
 }
 
 pub type ModifierArena = ListArena<ModifierID, Modifier>;
