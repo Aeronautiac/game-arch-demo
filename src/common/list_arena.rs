@@ -14,6 +14,8 @@ struct ListArenaNode<K: slotmap::Key, T> {
 
 // there may be cases where entities have many items in their list, leaving massive gaps after they are
 // removed, and slowly degrading the integrity of a standard slotmap, so dense is the better option.
+// if for example there are many entities with modifiers, and those entities are all removed, you
+// would get tons of cache misses for the entities that remain.
 pub struct ListArena<K: slotmap::Key, T> {
     nodes: DenseSlotMap<K, ListArenaNode<K, T>>,
 }
@@ -283,4 +285,3 @@ mod list_arena_tests {
         arena.for_each(key, |_| panic!("should not be called"));
     }
 }
-

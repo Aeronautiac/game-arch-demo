@@ -73,8 +73,8 @@ pub struct KinematicData {
 #[derive(Component, Default)]
 pub struct Physics {
     pub kinematic_data: KinematicData,
-    pub first_modifier: Option<ModifierID>,
-    pub first_constraint: Option<ConstraintID>,
+    first_modifier: Option<ModifierID>,
+    first_constraint: Option<ConstraintID>,
 }
 
 impl Physics {

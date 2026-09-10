@@ -48,6 +48,7 @@ pub struct SimInput {
     pub dt: TimeInt,
 }
 
+#[derive(Clone)]
 pub enum ViewDataPayload {
     Physical {
         entity_id: Entity,
@@ -57,6 +58,7 @@ pub enum ViewDataPayload {
     },
 }
 
+#[derive(Clone)]
 pub struct ViewData {
     pub payload: ViewDataPayload,
     pub tick: TickInt,
@@ -74,22 +76,51 @@ impl LossyViewBuffer {
     }
 
     // if there are too many entries in the batch, we reserve more room so nothing is immediately lost.
+    // also, if even after a compaction, there's still not enough room, we expand.
     //
-    // degradation only occurs across multiple ticks, i.e., when when we overflow on current storage,
-    // but not capacity. we then drop half precision.
-    pub fn append(&mut self, batch: &mut Vec<ViewDataPayload>) {
+    // degradation only occurs across multiple ticks, i.e., when we overflow on current storage,
+    // but not capacity. we then compact, losing an even distribution of half of all data.
+    pub fn append(&mut self, batch: &mut Vec<ViewData>) {
         let batch_len = batch.len();
         let capacity = self.data.capacity();
+        let size = self.data.len();
+
+        // not enough total capacity, grow
         if batch_len > capacity {
             let diff = batch_len - capacity;
             self.data.reserve(diff);
         }
+        let capacity = self.data.capacity();
 
-        // if the new data would overflow, half
+        // storage overflow
+        if batch_len + size > capacity {
+            self.compact();
+        }
+        let size = self.data.len();
+
+        // if theres not enough space even after a compaction, grow
+        if batch_len + size > capacity {
+            let diff = batch_len - capacity;
+            self.data.reserve(diff);
+        }
+
+        self.data.extend(batch.iter().cloned());
     }
 
-    // discard odd indices
-    pub fn drop_precision(&mut self) {}
+    // discard odd indices by iterating and replacing, then cutting the tail.
+    // compaction is supposed to be extremely rare. it is a worst case scenario.
+    pub fn compact(&mut self) {
+        let mut idx: usize = 0;
+        for i in 0..self.data.len() {
+            // extract even numbered indices
+            if i % 2 == 0 {
+                let data = self.data[i].clone();
+                self.data[idx] = data;
+                idx += 1;
+            }
+        }
+        self.data.truncate(idx);
+    }
 
     // binary search to find the cut point (where tick > cut_tick), then cut off the prefix.
     pub fn discard_to(&mut self, cut_tick: TickInt) {
