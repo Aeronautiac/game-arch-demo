@@ -1,14 +1,18 @@
 use std::collections::VecDeque;
 
-use bevy_ecs::{entity::Entity, resource::Resource, schedule::Schedule, world::World};
+use bevy_ecs::{
+    entity::Entity,
+    resource::Resource,
+    schedule::{IntoScheduleConfigs, Schedule},
+    world::World,
+};
 use glam::Vec2;
 
-use crate::{
-    common::list_arena::ListArena,
-    simulation::ecs::{
-        physics::{ConstraintArena, ModifierArena, physics_values},
-        transform::Transform,
+use crate::simulation::ecs::{
+    physics::{
+        ConstraintArena, ModifierArena, collision_detection, physics_application, physics_values,
     },
+    transform::Transform,
 };
 
 pub mod ecs;
@@ -161,7 +165,7 @@ pub struct Simulation {
 impl Simulation {
     pub fn new() -> Self {
         let mut schedule = Schedule::default();
-        schedule.add_systems(physics_values);
+        schedule.add_systems((physics_values, physics_application, collision_detection).chain());
 
         let mut world = World::new();
         world.insert_resource(Dt(0.0));

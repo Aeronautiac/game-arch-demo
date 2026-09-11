@@ -91,11 +91,11 @@ impl<K: slotmap::Key, T> ListArena<K, T> {
         }
     }
 
-    pub fn for_each_mut<F>(&mut self, start: K, mut f: F)
+    pub fn for_each_mut<F>(&mut self, start: Option<K>, mut f: F)
     where
         F: FnMut(&mut T),
     {
-        let mut curr = Some(start);
+        let mut curr = start;
         while let Some(key) = curr
             && let Some(node) = self.nodes.get_mut(key)
         {
@@ -104,11 +104,11 @@ impl<K: slotmap::Key, T> ListArena<K, T> {
         }
     }
 
-    pub fn for_each<F>(&self, start: K, f: F)
+    pub fn for_each<F>(&self, start: Option<K>, f: F)
     where
         F: Fn(&T),
     {
-        let mut curr = Some(start);
+        let mut curr = start;
         while let Some(key) = curr
             && let Some(node) = self.nodes.get(key)
         {
@@ -134,9 +134,7 @@ mod list_arena_tests {
         head: Option<DefaultKey>,
     ) -> Vec<i32> {
         let mut out = Vec::new();
-        if let Some(head) = head {
-            arena.for_each_mut(head, |v| out.push(*v));
-        }
+        arena.for_each_mut(head, |v| out.push(*v));
         out
     }
 
@@ -258,7 +256,7 @@ mod list_arena_tests {
         arena.add(&mut head, 2);
         arena.add(&mut head, 3);
 
-        arena.for_each_mut(head.unwrap(), |v| *v *= 10);
+        arena.for_each_mut(head, |v| *v *= 10);
         assert_eq!(collect_values(&mut arena, head), vec![30, 20, 10]);
     }
 
@@ -271,7 +269,7 @@ mod list_arena_tests {
         arena.add(&mut head, 3);
 
         let mut count = 0;
-        arena.for_each_mut(head.unwrap(), |_| count += 1);
+        arena.for_each_mut(head, |_| count += 1);
         assert_eq!(count, 3);
     }
 
@@ -282,6 +280,6 @@ mod list_arena_tests {
         let key = arena.add(&mut head, 1);
         arena.remove(&mut head, key);
 
-        arena.for_each(key, |_| panic!("should not be called"));
+        arena.for_each(Some(key), |_| panic!("should not be called"));
     }
 }

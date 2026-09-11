@@ -1,8 +1,14 @@
-use bevy_ecs::{component::Component, entity::Entity, system::Query};
+use bevy_ecs::{
+    component::Component,
+    system::{Query, Res, ResMut},
+};
 use glam::Vec2;
 use slotmap::new_key_type;
 
-use crate::common::list_arena::ListArena;
+use crate::{
+    common::list_arena::ListArena,
+    simulation::{Dt, PhysicsArenas, ecs::transform::Transform},
+};
 
 /*
 * The physics system is composed of two layers and two sweeps.
@@ -46,19 +52,26 @@ new_key_type! {
     pub struct ConstraintID;
 }
 
-pub enum Constraint {
-    // THIS IS AN EXAMPLE CONSTRAINT
-    // simulate gravity between two objects
-    // objects must have mass
-    GravityLink { g: f32, to: Entity },
-}
+pub enum Constraint {}
 
 pub type ConstraintArena = ListArena<ConstraintID, Constraint>;
 
 #[derive(Default)]
 pub struct KinematicData {
-    pub velocity: Vec2,
-    pub angular_velocity: f32,
+    base_vel: Vec2,
+    var_vel: Vec2,
+    base_ang_vel: f32,
+    var_ang_vel: f32,
+}
+
+impl KinematicData {
+    pub fn vel(&self) -> Vec2 {
+        self.base_vel + self.var_vel
+    }
+
+    pub fn ang_vel(&self) -> f32 {
+        self.base_ang_vel + self.var_ang_vel
+    }
 }
 
 #[derive(Component, Default)]
@@ -104,20 +117,44 @@ struct ModifierUpdate {
 }
 
 // modifies only physics values, does not apply the values to position or similar.
-pub fn physics_values(mut query: Query<(&mut Physics)>) {
+pub fn physics_values(
+    dt: Res<Dt>,
+    mut physics_arenas: ResMut<PhysicsArenas>,
+    mut query: Query<&mut Physics>,
+) {
     // TODO:
     // use something like a scratchpad arena instead to avoid an alloc on every tick
-    let mut constraint_stage: Vec<ModifierUpdate> = Vec::new();
+    //
+    // let mut constraint_stage: Vec<ModifierUpdate> = Vec::new();
 
     // constraint building pass
-    for (mut phyics) in &mut query {}
+    // for (mut physics) in &mut query {}
 
     // constraint application pass
 
     // modifier application pass
-    for (mut phyics) in &mut query {}
+    for mut physics in &mut query {
+        physics.kinematic_data.base_vel = Vec2::new(0.0, 0.0);
+        physics.kinematic_data.base_ang_vel = 0.0;
+        physics_arenas
+            .modifiers
+            .for_each_mut(physics.first_modifier, |m| match *m {
+                Modifier::Velocity(val) => physics.kinematic_data.base_vel += val,
+                Modifier::AngularVelocity(val) => physics.kinematic_data.base_ang_vel += val,
+                Modifier::Force(val) => physics.kinematic_data.var_vel += val * dt.0,
+                Modifier::AngularForce(val) => physics.kinematic_data.var_ang_vel += val * dt.0,
+            });
+    }
 }
 
 // applies physics to transforms and handles things like collision detection (does not technically
 // need to be run in serial, we can likely optimize)
-pub fn physics_application() {}
+pub fn physics_application(dt: Res<Dt>, mut query: Query<(&mut Transform, &Physics)>) {
+    for (mut transform, physics) in &mut query {
+        transform.position += physics.kinematic_data.vel() * dt.0;
+        let rot = transform.get_rotation();
+        transform.set_rotation(rot + physics.kinematic_data.ang_vel() * dt.0);
+    }
+}
+
+pub fn collision_detection() {}
