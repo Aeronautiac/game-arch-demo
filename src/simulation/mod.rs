@@ -1,9 +1,15 @@
 use std::collections::VecDeque;
 
-use bevy_ecs::{entity::Entity, schedule::Schedule, world::World};
+use bevy_ecs::{entity::Entity, resource::Resource, schedule::Schedule, world::World};
 use glam::Vec2;
 
-use crate::simulation::ecs::transform::Transform;
+use crate::{
+    common::list_arena::ListArena,
+    simulation::ecs::{
+        physics::{ConstraintArena, ModifierArena, physics_values},
+        transform::Transform,
+    },
+};
 
 pub mod ecs;
 
@@ -130,6 +136,18 @@ impl LossyViewBuffer {
     }
 }
 
+#[derive(Resource)]
+pub struct Dt(TimeFloat);
+
+#[derive(Resource)]
+pub struct PhysicsArenas {
+    pub modifiers: ModifierArena,
+    pub constraints: ConstraintArena,
+}
+
+#[derive(Resource)]
+pub struct LossyViewStage(Vec<ViewDataPayload>);
+
 pub struct Simulation {
     excess: u64,
     tick: u64,
@@ -137,20 +155,27 @@ pub struct Simulation {
     schedule: Schedule,
 
     // output buffers
-    lossy_view_stage: Vec<ViewDataPayload>,
     pub lossy_view_buf: LossyViewBuffer,
 }
 
 impl Simulation {
     pub fn new() -> Self {
-        let schedule = Schedule::default();
+        let mut schedule = Schedule::default();
+        schedule.add_systems(physics_values);
+
+        let mut world = World::new();
+        world.insert_resource(Dt(0.0));
+        world.insert_resource(PhysicsArenas {
+            modifiers: ModifierArena::default(),
+            constraints: ConstraintArena::default(),
+        });
+        world.insert_resource(LossyViewStage(Vec::default()));
 
         Simulation {
             excess: 0,
             tick: 0,
-            world: World::new(),
-            lossy_view_stage: Vec::default(),
             lossy_view_buf: LossyViewBuffer::new(4096),
+            world,
             schedule,
         }
     }
@@ -173,9 +198,6 @@ impl Simulation {
                 break;
             }
 
-            // movement_system(&mut self.world);
-            // apply_forces(&mut self.world, tick_duration);
-            // apply_velocity(&mut self.world, tick_duration);
             self.schedule.run(&mut self.world);
 
             remaining_time -= tick_duration;

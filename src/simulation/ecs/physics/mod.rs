@@ -1,4 +1,4 @@
-use bevy_ecs::{component::Component, entity::Entity};
+use bevy_ecs::{component::Component, entity::Entity, system::Query};
 use glam::Vec2;
 use slotmap::new_key_type;
 
@@ -30,7 +30,7 @@ use crate::common::list_arena::ListArena;
 */
 
 new_key_type! {
-    struct ModifierID;
+    pub struct ModifierID;
 }
 
 pub enum Modifier {
@@ -43,18 +43,14 @@ pub enum Modifier {
 pub type ModifierArena = ListArena<ModifierID, Modifier>;
 
 new_key_type! {
-    struct ConstraintID;
+    pub struct ConstraintID;
 }
 
 pub enum Constraint {
     // THIS IS AN EXAMPLE CONSTRAINT
     // simulate gravity between two objects
     // objects must have mass
-    GravityLink {
-        g: f32,
-        obj_a: Entity,
-        obj_b: Entity,
-    },
+    GravityLink { g: f32, to: Entity },
 }
 
 pub type ConstraintArena = ListArena<ConstraintID, Constraint>;
@@ -101,3 +97,27 @@ impl Physics {
         constraint_arena.remove(&mut self.first_constraint, constraint_id)
     }
 }
+
+struct ModifierUpdate {
+    pub mod_id: ModifierID,
+    pub new_val: Modifier,
+}
+
+// modifies only physics values, does not apply the values to position or similar.
+pub fn physics_values(mut query: Query<(&mut Physics)>) {
+    // TODO:
+    // use something like a scratchpad arena instead to avoid an alloc on every tick
+    let mut constraint_stage: Vec<ModifierUpdate> = Vec::new();
+
+    // constraint building pass
+    for (mut phyics) in &mut query {}
+
+    // constraint application pass
+
+    // modifier application pass
+    for (mut phyics) in &mut query {}
+}
+
+// applies physics to transforms and handles things like collision detection (does not technically
+// need to be run in serial, we can likely optimize)
+pub fn physics_application() {}
